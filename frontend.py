@@ -222,7 +222,7 @@ class FlashcardApp:
         selected_deck = next((d for d in self.decks if d.name == deck), None)
         
         try:
-            new_card = backend.Card(front, back)
+            new_card = backend.Flashcard(front, back)
             selected_deck.add_card(new_card)
 
             if hasattr(selected_deck, "_card_count"):
@@ -271,6 +271,7 @@ class FlashcardApp:
         self.show_card_front()
 
         # When clicking space, it reveals the answer
+        self.study_deck_window.unbind("<space>")
         self.study_deck_window.bind("<space>", self.on_space)
 
     def on_space(self, event):
@@ -330,6 +331,8 @@ class FlashcardApp:
         self.card_answer.pack_forget()
         self.rating_frame.pack_forget()
 
+        self.study_deck_window.unbind("<space>")
+
         self.card_text.config(text="Congratulations!")
         self.card_answer.config(text=f"Score: {getattr(self.current_deck, 'score', 0)}")
         self.card_answer.pack(pady=10)
@@ -340,6 +343,10 @@ class FlashcardApp:
             self.study_deck_window.unbind("<space>")
         except Exception:
             pass
+
+    def close_study_window(self):
+        self.study_deck_window.unbind("<space>")
+        self.study_deck_window.destroy()
 
     def edit_deck(self, deck):
         # TODO
