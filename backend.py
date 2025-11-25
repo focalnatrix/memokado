@@ -1,47 +1,15 @@
 import json
 import uuid
+import time
 import os
 
 class Flashcard:
-    """
-    Represents a single flashcard.
-    Stores:
-      - front/back text
-      - SM-2 values (interval, ease_factor, repetitions)
-    """
-
     def __init__(self, front, back, card_id=None, created_at=None):
         self.id = card_id or str(uuid.uuid4()) 
         self.front = front
-        self.back = back
-        self.repetitions = 0      
-        self.interval = 1         
-        self.ease_factor = 2.5    
-        self.created_at = created_at or uuid.uuid4().int
+        self.back = back 
+        self.created_at = int(time.time())
         self.last_score = 0
-
-    def apply_rating(self, rating):
-        self.last_score = rating
-
-        match rating:
-            case "0":
-                self.repetitions = 0
-                self.interval = 1
-                self.ease_factor = max(1.3, self.ease_factor - 0.2)
-            case "1":
-                self.repetitions += 1
-                self.interval = max(1, int(self.interval * 1.2))
-                self.ease_factor = max(1.3, self.ease_factor - 0.05)
-            case "2":
-                self.repetitions += 1
-                match self.repetitions:
-                    case "1":
-                        self.interval = 1
-                    case "2":
-                        self.interval = 3
-                    case _:
-                        self.interval = int(self.interval * self.ease_factor)
-                self.ease_factor = min(2.5, self.ease_factor + 0.1)
 
 class Deck:
     def __init__(self, name):
@@ -76,27 +44,36 @@ class Deck:
                 high = mid - 1
         return None
 
-    def sort_by_id(self):
-        self.cards = self._quicksort(self.cards, key=lambda c: c.id)
-
     def sort_by_score(self):
-        self.cards.sort(key=lambda c: (c.last_score, c.created_at))
+        self.cards = self.quicksort(self.cards, key=lambda c: c.last_score)
 
-    @staticmethod
-    def _quicksort(cards, key):
+    def quicksort(self, cards, key):
+        if cards is None:
+            cards = self.cards
+
         if len(cards) <= 1:
             return cards
+        
         pivot = key(cards[len(cards) // 2])
         left = [c for c in cards if key(c) < pivot]
         mid = [c for c in cards if key(c) == pivot]
         right = [c for c in cards if key(c) > pivot]
-        return Deck._quicksort(left, key) + mid + Deck._quicksort(right, key)
+        return self.quicksort(left, key) + mid + self.quicksort(right, key)
 
     def rate_card(self, card: Flashcard, rating):
-        card.apply_rating(rating)
-
+        card.last_score = rating
         self.score += rating
-        self.sort_by_score()
+
+    def insert_card_sorted(self, card):
+        # Uses binary search to find correct index
+        low, high = 0, len(self.cards)
+        while low < high:
+            mid = (low + high) // 2
+            if self.cards[mid].last_score < card.last_score:
+                low = mid + 1
+            else:
+                high = mid
+        self.cards.insert(low, card)
 
     def max_score(self):
         """
@@ -105,9 +82,6 @@ class Deck:
         """
         return len(self.cards) * 2
 
-    # --------------------------------------------------
-    # SAVE DECK TO JSON
-    # --------------------------------------------------
     def save_to_file(self, filename):
         data = {
             "name": self.name,
@@ -117,9 +91,6 @@ class Deck:
         with open(filename, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=4)
 
-    # --------------------------------------------------
-    # LOAD DECK FROM JSON
-    # --------------------------------------------------
     @classmethod
     def load_from_file(cls, filename):
         if not os.path.exists(filename):
@@ -132,11 +103,9 @@ class Deck:
                 card = Flashcard(
                     front=card_data["front"],
                     back=card_data["back"],
-                    card_id=card_data["id"]
+                    card_id=card_data["id"],
+                    created_at=card_data.get("created_at")
                 )
-                card.repetitions = card_data["repetitions"]
-                card.interval = card_data["interval"]
-                card.ease_factor = card_data["ease_factor"]
                 card.last_score = card_data.get("last_score", 0)
                 deck.cards.append(card)
             return deck
@@ -147,9 +116,7 @@ class Deck:
             "id": card.id,
             "front": card.front,
             "back": card.back,
-            "repetitions": card.repetitions,
-            "interval": card.interval,
-            "ease_factor": card.ease_factor,
+            "created_at": card.created_at,
             "last_score": getattr(card, "last_score", 0)
         }
 

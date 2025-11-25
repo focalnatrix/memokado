@@ -1,6 +1,5 @@
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
-import uuid
 import backend
 
 class FlashcardApp:
@@ -8,6 +7,7 @@ class FlashcardApp:
         self.decks = []
         self.current_deck = None
         self.deck_rows_frame = None
+        self.no_decks_label = None
 
         self.main_window = tk.Tk()
         self.main_window.title("Flashcards")
@@ -25,7 +25,7 @@ class FlashcardApp:
 
         # Text here should be some welcoming text or whatever
         ttk.Label(self.main_frame, text="Welcome to Memokado!", 
-                  font=("Arial", 16, "bold")).pack(padx=10, pady=10)
+                  font=("Arial", 20, "bold")).pack(padx=10, pady=10)
 
         self.decks_container = ttk.Frame(self.main_frame)
         self.decks_container.pack(fill="both", expand=True)
@@ -36,6 +36,8 @@ class FlashcardApp:
                    command=self.create_deck_menu).pack(pady=2)
         ttk.Button(self.main_frame, text="Add New Card", 
                    command=self.create_card_menu).pack(pady=2)
+        ttk.Button(self.main_frame, text="Load Deck from File", 
+                   command=self.load_deck).pack(pady=2)
 
     def create_deck_menu(self):
         self.create_deck_window = tk.Toplevel(self.main_window)
@@ -74,9 +76,8 @@ class FlashcardApp:
         try:
             new_deck = backend.Deck(deck_name)
             self.decks.append(new_deck)
-            self.show_decks(self.decks_container)
 
-            self.create_deck_window.destroy()
+            self.show_decks(self.decks_container)
 
             if self.no_decks_label:
                 self.no_decks_label.destroy()
@@ -85,6 +86,8 @@ class FlashcardApp:
             row_index = len(self.decks)
             self._add_deck_to_table(new_deck, row_index)
 
+            self.create_deck_window.destroy()
+
         except Exception as e:
             messagebox.showerror("Error", f"Failed to create deck: {str(e)}") 
 
@@ -92,21 +95,19 @@ class FlashcardApp:
         for widget in parent_frame.winfo_children():
             widget.destroy()
 
-        wrapper = ttk.Frame(parent_frame)
-        wrapper.pack(pady=2)
-        wrapper.pack(anchor="center")
-
-        self.deck_rows_frame = ttk.Frame(wrapper)
+        self.deck_rows_frame = ttk.Frame(parent_frame)
         self.deck_rows_frame.pack(anchor="center")
 
         if not self.decks:
             self.no_decks_label = ttk.Label(
                 self.deck_rows_frame, 
-                text="No decks available. Create a new deck to get started!", 
+                text="No decks yet. Create a new one to get started!", 
                 foreground="gray", anchor="center"
             )
             self.no_decks_label.grid(row=0, column=0, columnspan=4, pady=10)
             return
+        
+        self.no_decks_label = None
 
         headings = ["Deck Name", "Cards", "Last Score", "Actions"]
         for col, text in enumerate(headings):
@@ -140,7 +141,7 @@ class FlashcardApp:
             side="left", padx=2)
         ttk.Button(button_frame, text="Edit", command=lambda d=deck: self.edit_deck(d)).pack(
             side="left", padx=2)
-        ttk.Button(button_frame, text="Delete", command=lambda d=deck: self.delete_deck(d)).pack(
+        ttk.Button(button_frame, text="Save", command=lambda d=deck: self.save_deck(d)).pack(
             side="left", padx=2)
 
     def create_card_menu(self):
@@ -192,19 +193,18 @@ class FlashcardApp:
         ttk.Button(button_frame, text="Create Card", command=self.create_card).grid(row=0, column=0)
 
     def create_card(self):
-        front = self.front_entry.get("1.0", "end")
-        back = self.back_entry.get("1.0", "end")
+        front = self.front_entry.get("1.0", "end").strip()
+        back = self.back_entry.get("1.0", "end").strip()
         deck = self.deck_entry.get()
 
         if not front or not back:
             messagebox.showerror("Error", "Both front and back parts must be filled!")
             return
         
-        selected_deck = next((d for d in self.decks if d.name == deck), None)
-        
         try:
+            selected_deck = next((d for d in self.decks if d.name == deck), None)
             new_card = backend.Flashcard(front, back)
-            selected_deck.add_card(new_card)
+            selected_deck.insert_card_sorted(new_card)
 
             if hasattr(selected_deck, "_card_count"):
                 selected_deck._card_count.config(text=str(len(selected_deck.cards)))
@@ -223,7 +223,11 @@ class FlashcardApp:
 
         self.study_cards = list(deck.cards)
         self.study_cards_index = 0
+
         self.current_deck = deck
+        self.current_deck.sort_by_score()
+        self.current_deck.score = 0
+
         self.showing_front = True
 
         self.study_deck_window = tk.Toplevel(self.main_window)
@@ -247,10 +251,12 @@ class FlashcardApp:
         self.show_answer_button.pack(pady=10)
 
         self.rating_frame = ttk.Frame(self.study_deck_window)
-        for i, text in enumerate(["Again", "Okay", "Good"]):
-            btn = ttk.Button(self.rating_frame, text=text)
-            btn.config(command=lambda rating=i: self.rate_card(rating))
-            btn.pack(side="left", padx=5)
+        for score_value, text in enumerate(["Again", "Okay", "Good"]):
+            ttk.Button(
+                self.rating_frame,
+                text=text,
+                command=lambda r=score_value: self.rate_card(r)
+            ).pack(side="left", padx=5)
 
         self.show_card_front()
 
@@ -276,8 +282,6 @@ class FlashcardApp:
         card = self.study_cards[self.study_cards_index]
         self.card_answer.config(text=card.back)
 
-        self.study_deck_window.update_idletasks()
-
         self.card_answer.pack(pady=30)
         self.rating_frame.pack(pady=30)
 
@@ -290,7 +294,7 @@ class FlashcardApp:
             return
 
         card = self.study_cards[self.study_cards_index]
-
+        
         self.current_deck.rate_card(card, rating)
 
         self.study_cards_index += 1
@@ -304,14 +308,20 @@ class FlashcardApp:
         self.card_answer.pack_forget()
         self.rating_frame.pack_forget()
 
-        self.card_text.config(text="Congratulations!")
-        self.card_answer.config(text=f"Score: {self.current_deck.score}")
+        self.card_text.config(text="Congratulations!", font=("Arial", 16, "bold"))
+        self.card_answer.config(text=f"Your score for this deck is {self.current_deck.score} out of {self.current_deck.max_score()}!")
         self.card_answer.pack(pady=10)
+
+        self.current_deck.sort_by_score()
 
         if hasattr(self.current_deck, "_score_label"):
             self.current_deck._score_label.config(
                 text=f"{self.current_deck.score} / {self.current_deck.max_score()}"
             )
+
+        ttk.Button(self.card_answer.master, text="Go Back", command=self.study_deck_window.destroy).pack(
+            pady=10
+        )
 
         self.showing_front = False
 
@@ -354,8 +364,13 @@ class FlashcardApp:
 
             self.show_decks(self.decks_container)
 
-        ttk.Button(deck_frame, text="Save Deck Name", command=save_deck_name).grid(
-            row=3, column=0, pady=10, sticky="n")
+        btn_frame = ttk.Frame(deck_frame, padding=15)
+        btn_frame.grid(row=3, column=0, padx=10)
+
+        ttk.Button(btn_frame, text="Save Deck Name", command=save_deck_name).grid(
+            row=0, column=0, padx=10, pady=3, sticky="w")
+        ttk.Button(btn_frame, text="Delete Deck", command=lambda d=deck: self.delete_deck(d)).grid(
+            row=0, column=1, pady=3, sticky="w")
 
         cards_frame = ttk.Frame(main_frame, padding=10)
         cards_frame.grid(row=1, column=0, sticky="nsew")
@@ -381,10 +396,16 @@ class FlashcardApp:
             btn_frame.grid(row=i+1, column=2, padx=5, pady=5, sticky="w")
             ttk.Button(btn_frame, text="Delete", command=lambda c=card: self.delete_card(deck, c, cards_frame)).pack(side="left", padx=2)
 
+        ttk.Button(main_frame, text="Go Back", command=self.edit_deck_window.destroy).grid(
+            row=3, column=0, padx=5, pady=5, sticky="we")
+
     def delete_deck(self, deck):
         confirm = messagebox.askyesno("Confirm Delete", f"Are you sure you want to delete the deck '{deck.name}'?")
         if not confirm:
             return
+        
+        self.edit_deck_window.destroy()
+        messagebox.showinfo("Success", f"Deck '{deck.name}' was deleted.")
         
         if deck in self.decks:
             self.decks.remove(deck)
@@ -397,15 +418,48 @@ class FlashcardApp:
         confirm = messagebox.askyesno("Confirm Delete", "Delete this card?")
         if not confirm:
             return
-        
-        if deck.remove_card(card.id):
-            if hasattr(deck, "_card_count"):
-                deck._card_count.config(text=str(len(deck.cards)))
-            
-            for widget in parent_frame.winfo_children():
-                widget.destroy()
-            self.edit_deck(deck)
 
+        '''
+        need to redo
+        '''
+
+    def save_deck(self, deck):
+        filename = filedialog.asksaveasfilename(
+            title=f"Save deck '{deck.name}'",
+            defaultextension=".json",
+            filetypes=[("JSON Files", "*.json")]
+        )
+        if not filename:
+            return 
+
+        try:
+            deck.save_to_file(filename)
+            messagebox.showinfo("Success", f"Deck '{deck.name}' saved successfully!")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to save deck: {str(e)}")
+
+    def load_deck(self):
+        filename = filedialog.askopenfilename(
+            title="Select deck file",
+            filetypes=[("JSON Files", "*.json")]
+        )
+
+        if not filename:
+            return
+        
+        deck = backend.Deck.load_from_file(filename)
+        if not deck:
+            messagebox.showerror("Error", "Failed to load deck from file!")
+            return
+        
+        self.decks.append(deck)
+
+        for widget in self.deck_rows_frame.winfo_children():
+            widget.destroy()
+        self.show_decks(self.decks_container)
+
+        messagebox.showinfo("Success", f"Loaded deck '{deck.name}' successfully!")
+    
     def center_window(self, window, width=None, height=None):
         window.update_idletasks()
         w = width if width else window.winfo_width()
