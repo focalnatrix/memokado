@@ -1,5 +1,6 @@
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
+from functools import partial
 import backend
 
 class FlashcardApp:
@@ -23,7 +24,6 @@ class FlashcardApp:
         self.main_frame = ttk.Frame(self.main_window, padding="50")
         self.main_frame.pack(fill="both", expand=True)
 
-        # Text here should be some welcoming text or whatever
         ttk.Label(self.main_frame, text="Welcome to Memokado!", 
                   font=("Arial", 20, "bold")).pack(padx=10, pady=10)
 
@@ -40,6 +40,11 @@ class FlashcardApp:
                    command=self.load_deck).pack(pady=2)
 
     def create_deck_menu(self):
+        '''
+        Shows the menu for creating a deck.
+        The deck is only created when user clicks "Create This Deck".
+        '''
+
         self.create_deck_window = tk.Toplevel(self.main_window)
         self.create_deck_window.title("Create Deck")
 
@@ -67,6 +72,11 @@ class FlashcardApp:
         ttk.Button(button_frame, text="Create This Deck", command=self.create_deck).grid(row=0, column=0)     
 
     def create_deck(self):
+        '''
+        Creates the deck with name {deck_name}
+        A name is required to create a deck
+        '''
+
         deck_name = self.name_entry.get()
 
         if not deck_name:
@@ -92,6 +102,11 @@ class FlashcardApp:
             messagebox.showerror("Error", f"Failed to create deck: {str(e)}") 
 
     def show_decks(self, parent_frame):
+        '''
+        Shows a table with all of the decks in the main menu
+        Initializes the headings only when self.decks is not empty
+        '''
+
         for widget in parent_frame.winfo_children():
             widget.destroy()
 
@@ -109,17 +124,32 @@ class FlashcardApp:
         
         self.no_decks_label = None
 
+        # Deck table headings
         headings = ["Deck Name", "Cards", "Last Score", "Actions"]
         for col, text in enumerate(headings):
             ttk.Label(self.deck_rows_frame, text=text, font=("Arial", 13, "bold")).grid(
                 row=0, column=col, padx=5, pady=3
             )
 
+        # Adds a deck as a row
         for i, deck in enumerate(self.decks):
             self._add_deck_to_table(deck, i + 1)
 
     def _add_deck_to_table(self, deck, row_index):
-        # Loads each deck into the main menu table
+        '''
+        Represents a deck in the decks table
+        Each row has the following attributes:
+        - Deck name
+        - Number of cards
+        - Previous study session's score
+        
+        A user can
+        - Study a deck
+        - Edit a deck
+        - Save a deck locally
+        '''
+
+        # Loads the deck into the main menu table
         ttk.Label(self.deck_rows_frame, text=deck.name).grid(
                 row=row_index, column=0, padx=5, pady=2, sticky="w")
         
@@ -128,7 +158,7 @@ class FlashcardApp:
         cards_label.grid(row=row_index, column=1, padx=5, pady=2)
         deck._card_count = cards_label
 
-        # Shows the deck's previous score
+        # Shows the deck's score from the previous study session
         score_label = ttk.Label(self.deck_rows_frame, text=f"{deck.score} / {deck.max_score()}")
         score_label.grid(row=row_index, column=2, padx=5, pady=2)
         deck._score_label = score_label
@@ -145,6 +175,15 @@ class FlashcardApp:
             side="left", padx=2)
 
     def create_card_menu(self):
+        '''
+        Shows the menu for creating a card.
+        Allows the user to input the following attributes:
+        - Deck
+        - Front
+        - Back
+        The card is only created when user clicks "Create Card".
+        '''
+
         if not self.decks:
             messagebox.showerror("Error", "You need to create a deck before adding cards!")
             return
@@ -193,10 +232,15 @@ class FlashcardApp:
         ttk.Button(button_frame, text="Create Card", command=self.create_card).grid(row=0, column=0)
 
     def create_card(self):
+        '''
+        Creates the card with a front side and back side in the chosen deck
+        Both front and back fields cannot be empty
+        '''
+
         front = self.front_entry.get("1.0", "end").strip()
         back = self.back_entry.get("1.0", "end").strip()
         deck = self.deck_entry.get()
-
+        
         if not front or not back:
             messagebox.showerror("Error", "Both front and back parts must be filled!")
             return
@@ -217,6 +261,10 @@ class FlashcardApp:
             messagebox.showerror("Error", f"Failed to create card: {str(e)}")
 
     def study_deck(self, deck):
+        '''
+        Allows the user to study the cards in a deck
+        '''
+        
         if not deck.cards:
             messagebox.showerror("Error", "This deck has no cards to study!")
             return
@@ -226,16 +274,21 @@ class FlashcardApp:
 
         self.current_deck = deck
         self.current_deck.sort_by_score()
+
+        # Initializes the current deck's score
         self.current_deck.score = 0
 
+        # Hides back of card
         self.showing_front = True
-
+        
+        # General window setup
         self.study_deck_window = tk.Toplevel(self.main_window)
         self.study_deck_window.title(f"{deck.name}")
         self.study_deck_window.withdraw()
         self.center_window(self.study_deck_window, 500, 400)
         self.study_deck_window.deiconify()
 
+        # Card frame
         self.card_text = ttk.Label(
             self.study_deck_window, text="", font=("Arial", 16), wraplength=450
         )
@@ -245,11 +298,13 @@ class FlashcardApp:
             self.study_deck_window, text="", font=("Arial", 16), wraplength=450
         )
 
+        # Prompt to show the back
         self.show_answer_button = ttk.Button(
             self.study_deck_window, text="Show Answer", command=self.show_card_back
         )
         self.show_answer_button.pack(pady=10)
 
+        # Rating frame
         self.rating_frame = ttk.Frame(self.study_deck_window)
         for score_value, text in enumerate(["Again", "Okay", "Good"]):
             ttk.Button(
@@ -261,6 +316,10 @@ class FlashcardApp:
         self.show_card_front()
 
     def show_card_front(self):
+        '''
+        Shows the front of the card
+        Hides the back of the card until "Show Answer" is clicked
+        '''
         if self.study_cards_index >= len(self.study_cards):
             return
 
@@ -276,6 +335,10 @@ class FlashcardApp:
         self.showing_front = True
 
     def show_card_back(self):
+        '''
+        When "Show Answer" is clicked, this reveals the back of the card
+        Also reveals the rating buttons
+        '''
         if self.study_cards_index >= len(self.study_cards):
             return
 
@@ -290,6 +353,16 @@ class FlashcardApp:
         self.showing_front = False
 
     def rate_card(self, rating):
+        '''
+        Allows the user to rate the card between "Again", "Okay", "Good"
+        - Again = 0
+        - Okay = 1
+        - Good = 2
+        The rating represents a number that is added to the deck's overall score
+
+        When the user rates the card, the window shows the next card
+        '''
+
         if self.study_cards_index >= len(self.study_cards):
             return
 
@@ -305,6 +378,10 @@ class FlashcardApp:
             self.finish_study()
 
     def finish_study(self):
+        '''
+        When the last card has been rated, this shows the score for the study session
+        '''
+
         self.card_answer.pack_forget()
         self.rating_frame.pack_forget()
 
@@ -326,6 +403,11 @@ class FlashcardApp:
         self.showing_front = False
 
     def edit_deck(self, deck):
+        '''
+        Allows the user to edit the deck name and view all cards in a deck
+        '''
+
+        # General window setup
         self.edit_deck_window = tk.Toplevel(self.main_window)
         self.edit_deck_window.title(f"Editing {deck.name}")
         self.edit_deck_window.withdraw()
@@ -351,6 +433,10 @@ class FlashcardApp:
         name_entry.grid(row=2, column=0, pady=5, sticky="w")
 
         def save_deck_name():
+            '''
+            Saves the deck name in the main menu's deck
+            '''
+
             new_name = name_entry.get().strip()
             if not new_name:
                 messagebox.showerror("Error", "Deck name cannot be empty!")
@@ -364,6 +450,7 @@ class FlashcardApp:
 
             self.show_decks(self.decks_container)
 
+        # Deck edit options
         btn_frame = ttk.Frame(deck_frame, padding=15)
         btn_frame.grid(row=3, column=0, padx=10)
 
@@ -372,6 +459,7 @@ class FlashcardApp:
         ttk.Button(btn_frame, text="Delete Deck", command=lambda d=deck: self.delete_deck(d)).grid(
             row=0, column=1, pady=3, sticky="w")
 
+        # Table with all cards
         cards_frame = ttk.Frame(main_frame, padding=10)
         cards_frame.grid(row=1, column=0, sticky="nsew")
         cards_frame.grid_columnconfigure(0, weight=3)
@@ -394,12 +482,17 @@ class FlashcardApp:
             
             btn_frame = ttk.Frame(cards_frame)
             btn_frame.grid(row=i+1, column=2, padx=5, pady=5, sticky="w")
-            ttk.Button(btn_frame, text="Delete", command=lambda c=card: self.delete_card(deck, c, cards_frame)).pack(side="left", padx=2)
+            ttk.Button(btn_frame, text="Delete", command=partial(self.delete_card, deck, card)).pack(side="left", padx=2)
 
+        # Go back to the main menu
         ttk.Button(main_frame, text="Go Back", command=self.edit_deck_window.destroy).grid(
             row=3, column=0, padx=5, pady=5, sticky="we")
 
     def delete_deck(self, deck):
+        '''
+        Allows the user to delete the deck
+        '''
+
         confirm = messagebox.askyesno("Confirm Delete", f"Are you sure you want to delete the deck '{deck.name}'?")
         if not confirm:
             return
@@ -414,16 +507,30 @@ class FlashcardApp:
             widget.destroy()
         self.show_decks(self.decks_container)
 
-    def delete_card(self, deck, card, parent_frame):
+    def delete_card(self, deck, card):
+        '''
+        Allows the user to delete a card in the deck
+        '''
+
         confirm = messagebox.askyesno("Confirm Delete", "Delete this card?")
         if not confirm:
             return
 
+        deck.remove_card(card.id)
+
+        deck.sort_by_score()
+
+        self.edit_deck_window.destroy()
+
+        deck._card_count.config(text=str(len(deck.cards)))
+
+        self.edit_deck(deck)
+        
+    def save_deck(self, deck):
         '''
-        need to redo
+        Allows the user to save the deck as a JSON file
         '''
 
-    def save_deck(self, deck):
         filename = filedialog.asksaveasfilename(
             title=f"Save deck '{deck.name}'",
             defaultextension=".json",
@@ -439,6 +546,10 @@ class FlashcardApp:
             messagebox.showerror("Error", f"Failed to save deck: {str(e)}")
 
     def load_deck(self):
+        '''
+        Allows the user to load a JSON file as a deck
+        '''
+
         filename = filedialog.askopenfilename(
             title="Select deck file",
             filetypes=[("JSON Files", "*.json")]
@@ -461,6 +572,10 @@ class FlashcardApp:
         messagebox.showinfo("Success", f"Loaded deck '{deck.name}' successfully!")
     
     def center_window(self, window, width=None, height=None):
+        '''
+        Centers the windows because tkinter does not do that for some reason...
+        '''
+
         window.update_idletasks()
         w = width if width else window.winfo_width()
         h = height if height else window.winfo_height()

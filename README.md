@@ -1,6 +1,9 @@
-# Flashcards
+# Memokado
 
-idk a good title plsplspzplz help
+Introducing Memokado, a flashcard program that prioritizes the information you keep forgetting.
 
-## Algorithms Used
-This project mainly uses two algorithms: Quicksort and Binary Search.
+## Features
+- Create flashcard decks 
+- Create cards with front and back sides
+- Save and load decks as JSON files
+- Rate cards according to
